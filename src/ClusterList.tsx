@@ -10,7 +10,7 @@ function ClusterList({ clusterListChanged, onChange }: IClusterListProps) {
             {(_, { clusters, selectedCluster }) =>
                 <HTMLSelect
                     options={clusters.map(
-                        (x: any) => ({ value: x.id, label: x.name })
+                        (x: any) => ({ value: x.id, label: `${x.name} (${x.state})` })
                     )}
                     minimal={true}
                     className="jp-Notebook-toolbarCellTypeDropdown"

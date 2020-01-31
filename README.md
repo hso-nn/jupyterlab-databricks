@@ -3,6 +3,9 @@
 Configure Databricks kernel from jupyter labs.
 
 ![screenshot](screenshot.png)
+![screenshot](screenshot2.png)
+![screenshot](screenshot3.png)
+
 
 ## Prerequisites
 

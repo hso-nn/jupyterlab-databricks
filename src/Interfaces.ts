@@ -9,10 +9,16 @@ export interface IDatabrickConfig {
 
 export interface IConfChanged {
     selectedCluster: string,
-    clusters: Array<string>
+    clusters: Array<IClusterListItem>
 }
 
 export interface IClusterListProps {
     clusterListChanged: ISignal<any, IConfChanged>
     onChange: Function
+}
+
+export interface IClusterListItem {
+    id: string,
+    name: string,
+    state: string
 }

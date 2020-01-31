@@ -19,7 +19,7 @@ import {
 } from '@jupyterlab/docregistry';
 
 import {
-  NotebookPanel, INotebookModel
+  NotebookPanel, INotebookModel, NotebookActions
 } from '@jupyterlab/notebook';
 
 import InputForm from "./InputForm"
@@ -28,7 +28,7 @@ import ClusterList from "./ClusterList"
 
 import '../style/index.css';
 import { Signal } from '@lumino/signaling';
-import { IConfChanged, IDatabrickConfig } from "./Interfaces";
+import { IConfChanged, IDatabrickConfig, IClusterListItem } from "./Interfaces";
 
 
 class DatabricksExtension implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel> {
@@ -45,7 +45,9 @@ class DatabricksExtension implements DocumentRegistry.IWidgetExtension<NotebookP
     let button: ToolbarButton
     let clusterList: ReactWidget
     let comm: Kernel.IComm
+    let commActions: Kernel.IComm
     let config: IDatabrickConfig
+    let clusters: Array<IClusterListItem>
 
     const configureDatabricks = async () => {
       let _config = new Map<string, string>(Object.entries(config))
@@ -75,12 +77,13 @@ class DatabricksExtension implements DocumentRegistry.IWidgetExtension<NotebookP
       const isNew = config === undefined
 
       config = msg.content.data.config
+      clusters = msg.content.data.clusters
 
-      this.confChanged.emit({ selectedCluster: msg.content.data.config.cluster_id, clusters: msg.content.data.clusters })
+      this.confChanged.emit({ selectedCluster: msg.content.data.config.cluster_id, clusters })
 
       if (isNew) maybeAddWidgets()
 
-      this.confChanged.emit({ selectedCluster: msg.content.data.config.cluster_id, clusters: msg.content.data.clusters })
+      this.confChanged.emit({ selectedCluster: msg.content.data.config.cluster_id, clusters })
     }
 
     const maybeAddWidgets = () => {
@@ -119,21 +122,35 @@ class DatabricksExtension implements DocumentRegistry.IWidgetExtension<NotebookP
       if (panel.session.kernel.name.startsWith("databricks")) {
         maybeAddWidgets()
 
-        const msg: any = await panel.session.kernel.requestCommInfo({ target_name: "databricks.config" })
-        const commId = Object.keys(msg.content.comms)[0]
-
-        comm = panel.session.kernel.connectToComm("databricks.config", commId)
+        let msg: any = await panel.session.kernel.requestCommInfo({ target_name: "databricks.config" })
+        comm = panel.session.kernel.connectToComm("databricks.config", Object.keys(msg.content.comms)[0])
         comm.onMsg = configChanged
+
+        
+        msg = await panel.session.kernel.requestCommInfo({ target_name: "databricks.actions" })
+        commActions = panel.session.kernel.connectToComm("databricks.actions", Object.keys(msg.content.comms)[0])
+
         setTimeout(() => comm.send("get_config"), 2000)
       } else {
         maybeRemoveWidgets()
         config = undefined
         await comm.close().done
+        await commActions.close().done
       }
     }
 
     // kernelChangedHandler(null)
     panel.session.kernelChanged.connect(kernelChangedHandler)
+
+    NotebookActions.executed.connect( async (_, { notebook, cell }) => {
+      if (config !== undefined) {
+        const cluster: IClusterListItem = clusters.reduce((a: any, b: IClusterListItem) => b.id === config.cluster_id ? b : a, null)
+        if (cluster.state === "terminated") {
+          await showDialog({title: "Turn on cluster", body: `Cluster '${cluster.name}' is currently not running. Would you like to turn it on?`})
+          commActions.send({"action": "start_cluster", "data": {"cluster_id": cluster.id}})
+        }
+      }
+    })
 
     return button
   }
