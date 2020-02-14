@@ -3,7 +3,7 @@ import {
 } from '@jupyterlab/application';
 
 import {
-  IDisposable
+  IDisposable, DisposableDelegate
 } from '@phosphor/disposable';
 
 import {
@@ -118,15 +118,15 @@ class DatabricksExtension implements DocumentRegistry.IWidgetExtension<NotebookP
       }
     }
 
-    const kernelChangedHandler = async (args: any|null) => {
+    const kernelChangedHandler = async (args: any | null) => {
       if (panel.session.kernel.name.startsWith("databricks")) {
         maybeAddWidgets()
+        let msg: any;
 
-        let msg: any = await panel.session.kernel.requestCommInfo({ target_name: "databricks.config" })
+        msg = await panel.session.kernel.requestCommInfo({ target_name: "databricks.config" })
         comm = panel.session.kernel.connectToComm("databricks.config", Object.keys(msg.content.comms)[0])
         comm.onMsg = configChanged
 
-        
         msg = await panel.session.kernel.requestCommInfo({ target_name: "databricks.actions" })
         commActions = panel.session.kernel.connectToComm("databricks.actions", Object.keys(msg.content.comms)[0])
 
@@ -142,28 +142,31 @@ class DatabricksExtension implements DocumentRegistry.IWidgetExtension<NotebookP
     // kernelChangedHandler(null)
     panel.session.kernelChanged.connect(kernelChangedHandler)
 
-    NotebookActions.executed.connect( async (_, { notebook, cell }) => {
+    NotebookActions.executed.connect(async (_, { notebook, cell }) => {
       if (config !== undefined) {
         const cluster: IClusterListItem = clusters.reduce((a: any, b: IClusterListItem) => b.id === config.cluster_id ? b : a, null)
         if (cluster.state === "terminated") {
-          await showDialog({title: "Turn on cluster", body: `Cluster '${cluster.name}' is currently not running. Would you like to turn it on?`})
-          commActions.send({"action": "start_cluster", "data": {"cluster_id": cluster.id}})
+          await showDialog({ title: "Turn on cluster", body: `Cluster '${cluster.name}' is currently not running. Would you like to turn it on?` })
+          commActions.send({ "action": "start_cluster", "data": { "cluster_id": cluster.id } })
         }
       }
     })
 
-    return button
+    return new DisposableDelegate(() => {
+      button.dispose();
+      clusterList.dispose();
+    })
   }
 }
 
 function activate(app: JupyterFrontEnd): void {
   let buttonExtension = new DatabricksExtension(app);
   app.docRegistry.addWidgetExtension('Notebook', buttonExtension);
-  app.contextMenu.addItem({
-    selector: '.jp-Notebook',
-    command: 'notebook:run-all-cells',
-    rank: -0.5
-  });
+  // app.contextMenu.addItem({
+  //   selector: '.jp-Notebook',
+  //   command: 'notebook:run-all-cells',
+  //   rank: -0.5
+  // });
 }
 
 const extension: JupyterFrontEndPlugin<void> = {
